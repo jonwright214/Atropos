@@ -1,70 +1,135 @@
 <?php
 session_start();
+include '../database/db_connect.php'; // Adjust path if needed
 
-// Check if the user is logged in, if
-// not then redirect them to the login page
-if (!isset($_SESSION['email'])) {
-    header("Location: login.php");
+if (!isset($_SESSION['user_id'])) {
+    die('You must be logged in to view this page.');
+}
+
+$user_id = $_SESSION['user_id'];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $selectedCharacter = $_POST['radioCharacterSelection'] ?? '';
+    if ($selectedCharacter === 'Empty') {
+        header("Location: characterselect.php?error=" . urlencode("You are unable to choose an empty slot."));
+        exit();
+    }
+
+    // Only select the requested columns
+    $stmt = $conn->prepare(
+        "SELECT character_name, character_title, character_race, character_class, character_hitpoints, character_stamina, character_mana, character_strength, character_dexterity, character_intelligence, character_armor_rating 
+         FROM characters 
+         WHERE user_id = ? AND character_name = ?"
+    );
+    $stmt->bind_param("is", $user_id, $selectedCharacter);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $characterData = $result->fetch_assoc();
+    $stmt->close();
+
+    if (!$characterData) {
+        header("Location: characterselect.php?error=" . urlencode("Selected character not found."));
+        exit();
+    }
+
+    // Define your label mapping
+    $labels = [
+        "character_name" => "Name",
+        "character_title" => "Title",
+        "character_race" => "Race",
+        "character_class" => "Class",
+        "character_hitpoints" => "HP",
+        "character_stamina" => "Stam",
+        "character_mana" => "Mana",
+        "character_strength" => "Str",
+        "character_dexterity" => "Dex",
+        "character_intelligence" => "Int",
+        "character_armor_rating" => "Armor"
+    ];
+} else {
+    header("Location: characterselect.php");
     exit();
 }
-
-if (isset($_POST['radioCharacterSelection'])) {
-    $selectedCharacter = $_POST['radioCharacterSelection'];
-    echo "You selected: " . htmlspecialchars($selectedCharacter);
-} else {
-    echo "No character selected.";
-}
-
-
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <link rel="stylesheet" href="../css/dashboard.css">
-    <link href=
-"https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href=
-"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.css">
-    <link rel="shortcut icon" href="https://cdn-icons-png.flaticon.com/512/295/295128.png">
-    <script src=
-"https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <meta charset="UTF-8">
-    <meta name="viewport"
-  content="width=device-width, initial-scale=1.0">
-    <title>Dashboard</title>
+    <title>Main Page</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+	
+	<!-- chat begin -->
+	<meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Chat</title>
+    <style>
+        #chatBox {
+            height: 300px;
+            overflow-y: scroll;
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+    </style>
+	<!-- chat end -->
+	
 </head>
-
-<body>
-    <nav class="navbar navbar-expand-sm navbar-light bg-success">
-        <div class="container">
-            <a class="navbar-brand" href="#" style="font-weight:bold; color:white;">Dashboard</a>
-            <button class="navbar-toggler d-lg-none" type="button" data-bs-toggle="collapse"
-                data-bs-target="#collapsibleNavId" aria-controls="collapsibleNavId" aria-expanded="false"
-                aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="collapsibleNavId">
-                <ul class="navbar-nav m-auto mt-2 mt-lg-0">
-                </ul>
-                <form class="d-flex my-2 my-lg-0">
-                    <a href="./logout.php" class="btn btn-light my-2 my-sm-0"
-                      type="submit" style="font-weight:bolder;color:green;">
-                        logout</a>
-                </form>
+<body class="bg-light">
+    <div class="container p-5">
+        <h2 class="mb-4">Character Details</h2>
+        <div class="card float-start" style="width: 24rem;">
+            <div class="card-body">
+                <?php foreach ($labels as $key => $label): ?>
+                    <p><strong><?php echo $label; ?>:</strong>
+                        <?php echo htmlspecialchars($characterData[$key]); ?>
+                    </p>
+                <?php endforeach; ?>
             </div>
         </div>
-    </nav>
-
-    <div>
-        <h2 class="p-4 mt-5">Welcome To Dashboard</h2>
-		<form class="d-flex my-2 my-lg-0">
-                    <a href="./character_creation.php" class="btn btn-light my-2 my-sm-0"
-                      type="submit" style="font-weight:bolder;color:green;">
-                        Character Creation</a>
-        </form>
     </div>
-</body>
+	<!-- chat begin -->
+	<div id="chatBox"></div>
+    <input type="text" id="messageInput" placeholder="Type a message">
+    <button id="sendBtn">Send</button>
 
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            // Fetch messages every 3 seconds
+            setInterval(fetchMessages, 3000);
+
+            // Send message on button click
+            $('#sendBtn').click(function() {
+                const message = $('#messageInput').val();
+                const user = 'User1';  // Hardcoded user for simplicity
+
+                $.ajax({
+                    url: 'send_message.php',
+                    method: 'POST',
+                    data: { message: message, user: user },
+                    success: function() {
+                        $('#messageInput').val('');  // Clear input field
+                        fetchMessages();  // Refresh message display
+                    }
+                });
+            });
+
+            // Function to fetch messages
+            function fetchMessages() {
+                $.ajax({
+                    url: 'fetch_messages.php',
+                    method: 'GET',
+                    dataType: 'json',
+                    success: function(messages) {
+                        $('#chatBox').empty();  // Clear previous messages
+                        messages.reverse().forEach(function(message) {
+                            $('#chatBox').append('<p><strong>' + message.user + ':</strong> ' + message.message + '</p>');
+                        });
+                    }
+                });
+            }
+        });
+    </script>
+	<!-- chat end -->
+</body>
 </html>
