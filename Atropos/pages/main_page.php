@@ -11,7 +11,7 @@ $user_id = $_SESSION['user_id'];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $selectedCharacter = $_POST['radioCharacterSelection'] ?? '';
     if ($selectedCharacter === 'Empty') {
-        header("Location: characterselect.php?error=" . urlencode("You are unable to choose an empty slot."));
+        header("Location: character_selection.php?error=" . urlencode("You are unable to choose an empty slot."));
         exit();
     }
 
@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt->close();
 
     if (!$characterData) {
-        header("Location: characterselect.php?error=" . urlencode("Selected character not found."));
+        header("Location: character_selection.php?error=" . urlencode("Selected character not found."));
         exit();
     }
 
@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         "character_armor_rating" => "Armor"
     ];
 } else {
-    header("Location: characterselect.php");
+    header("Location: character_selection.php");
     exit();
 }
 ?>
@@ -58,24 +58,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <title>Main Page</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
-	
-	<!-- chat begin -->
-	<meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Real-Time Chat</title>
     <style>
-        #chatBox {
-            height: 300px;
-            overflow-y: scroll;
+        .chatbox-wrapper {
+            position: fixed;
+            left: 50%;
+            bottom: 0;
+            transform: translateX(-50%);
+            width: 600px;
+            background: #fff;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            border-top: 1px solid #ccc;
+            padding: 15px;
+            z-index: 9999;
+            display: flex;
+        }
+        #userList {
+            width: 150px;
+            border-right: 1px solid #ccc;
+            padding-right: 10px;
+            margin-right: 10px;
+            height: 230px;
+            overflow-y: auto;
+        }
+        #chatTabs {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .tabs {
+            display: flex;
+        }
+        .tab-btn {
+            flex: 1;
+            background: #eee;
+            border: none;
+            padding: 8px 0;
+            cursor: pointer;
+        }
+        .tab-btn.active {
+            background: #ddd;
+            font-weight: bold;
+        }
+        .tab-content {
+            height: 150px;
+            overflow-y: auto;
             border: 1px solid #ccc;
             padding: 10px;
+            background: #f9f9f9;
+            margin-bottom: 8px;
+        }
+        .input-group {
+            margin-top: 2px;
         }
     </style>
-	<!-- chat end -->
-	
 </head>
 <body class="bg-light">
     <div class="container p-5">
+        <!-- Character card here -->
         <h2 class="mb-4">Character Details</h2>
         <div class="card float-start" style="width: 24rem;">
             <div class="card-body">
@@ -87,49 +126,146 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </div>
     </div>
-	<!-- chat begin -->
-	<div id="chatBox"></div>
-    <input type="text" id="messageInput" placeholder="Type a message">
-    <button id="sendBtn">Send</button>
+    <!-- Chatbox UI -->
+    <div class="chatbox-wrapper">
+        <div id="userList"></div>
+        <div id="chatTabs">
+            <div class="tabs" id="tabsBar">
+                <button class="tab-btn active" data-tab="main">Main Chat</button>
+                <button class="tab-btn" data-tab="combat">Combat</button>
+                <button class="tab-btn" data-tab="server">Server</button>
+            </div>
+            <div id="tabContents">
+                <div class="tab-content" id="mainTab"></div>
+                <div class="tab-content d-none" id="combatTab"></div>
+                <div class="tab-content d-none" id="serverTab"></div>
+            </div>
+            <div class="input-group">
+                <input type="text" id="messageInput" class="form-control" placeholder="Type a message">
+                <button id="sendBtn" class="btn btn-primary">Send</button>
+            </div>
+        </div>
+    </div>
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
-        $(document).ready(function() {
-            // Fetch messages every 3 seconds
-            setInterval(fetchMessages, 3000);
+        // Track private chat tabs
+        let privateTabs = {};
+        let lastTellUser = "";
+        const user = <?php echo json_encode($selectedCharacter); ?>;
 
-            // Send message on button click
-            $('#sendBtn').click(function() {
-                const message = $('#messageInput').val();
-                const user = 'User1';  // Hardcoded user for simplicity
-
-                $.ajax({
-                    url: 'send_message.php',
-                    method: 'POST',
-                    data: { message: message, user: user },
-                    success: function() {
-                        $('#messageInput').val('');  // Clear input field
-                        fetchMessages();  // Refresh message display
-                    }
-                });
-            });
-
-            // Function to fetch messages
-            function fetchMessages() {
-                $.ajax({
-                    url: 'fetch_messages.php',
-                    method: 'GET',
-                    dataType: 'json',
-                    success: function(messages) {
-                        $('#chatBox').empty();  // Clear previous messages
-                        messages.reverse().forEach(function(message) {
-                            $('#chatBox').append('<p><strong>' + message.user + ':</strong> ' + message.message + '</p>');
-                        });
-                    }
-                });
-            }
+        // Tab switching logic
+        $(document).on('click', '.tab-btn', function() {
+            $('.tab-btn').removeClass('active');
+            $(this).addClass('active');
+            // Hide all tab-content divs
+            $('#tabContents .tab-content').addClass('d-none');
+            // Show selected
+            let tab = $(this).data('tab');
+            $('#' + tab + 'Tab').removeClass('d-none');
         });
+
+        // Fetch messages/users every 3 seconds
+        setInterval(function() {
+            fetchMessages("main");
+            fetchMessages("combat");
+            fetchMessages("server");
+            fetchUserList();
+            // Fetch private tabs
+            Object.keys(privateTabs).forEach(function(u) {
+                fetchMessages("private-" + u);
+            });
+        }, 3000);
+
+        // Send message
+        $('#sendBtn').click(function() {
+            const rawMsg = $('#messageInput').val();
+            if (!rawMsg.trim()) return;
+
+            // Command parsing
+            if (rawMsg.startsWith('/tell ')) {
+                let parts = rawMsg.split(' ');
+                if (parts.length < 3) return;
+                let target = parts[1];
+                let msg = parts.slice(2).join(' ');
+
+                lastTellUser = target;
+                openPrivateTab(target);
+
+                sendMessage(msg, "private", target);
+            } else if (rawMsg.startsWith('/reply')) {
+                if (!lastTellUser) return;
+                let msg = rawMsg.replace('/reply', '').trim();
+                openPrivateTab(lastTellUser);
+                sendMessage(msg, "private", lastTellUser);
+            } else if (rawMsg.startsWith('/combat ')) {
+                let msg = rawMsg.replace('/combat', '').trim();
+                sendMessage(msg, "combat");
+            } else if (rawMsg.startsWith('/server ')) {
+                let msg = rawMsg.replace('/server', '').trim();
+                sendMessage(msg, "server");
+            } else {
+                sendMessage(rawMsg, "main");
+            }
+            $('#messageInput').val('');
+        });
+
+        function sendMessage(message, type, targetUser = "") {
+            $.ajax({
+                url: 'send_message.php',
+                method: 'POST',
+                data: { message: message, user: user, type: type, target: targetUser },
+                success: function(response) {
+                    // Optionally handle response
+                }
+            });
+        }
+
+        function fetchMessages(tabType) {
+            $.ajax({
+                url: 'fetch_messages.php',
+                method: 'GET',
+                data: { tab: tabType, user: user }, // Pass the tab type
+                dataType: 'json',
+                success: function(messages) {
+                    let tabId = tabType === "main" ? "#mainTab"
+                               : tabType === "combat" ? "#combatTab"
+                               : tabType === "server" ? "#serverTab"
+                               : "#private-" + tabType.split('-')[1] + "Tab";
+                    $(tabId).empty();
+                    messages.forEach(function(message) {
+                        $(tabId).append('<span><strong>' + message.user + ':</strong> ' + message.messages_main + '</span>');
+                    });
+                }
+            });
+        }
+
+        function fetchUserList() {
+            $.ajax({
+                url: 'fetch_users.php',
+                method: 'GET',
+                dataType: 'json',
+                success: function(users) {
+                    $('#userList').empty();
+                    users.forEach(function(u) {
+                        $('#userList').append('<div>' + u + '</div>');
+                    });
+                }
+            });
+        }
+
+        function openPrivateTab(targetUser) {
+            if (!privateTabs[targetUser]) {
+                // Add tab button
+                $('#tabsBar').append('<button class="tab-btn" data-tab="private-' + targetUser + '">' + targetUser + '</button>');
+                // Add tab content
+                $('#tabContents').append('<div class="tab-content d-none" id="private-' + targetUser + 'Tab"></div>');
+                privateTabs[targetUser] = true;
+            }
+            $('.tab-btn').removeClass('active');
+            $('.tab-content').addClass('d-none');
+            $('.tab-btn[data-tab="private-' + targetUser + '"]').addClass('active');
+            $('#private-' + targetUser + 'Tab').removeClass('d-none');
+        }
     </script>
-	<!-- chat end -->
 </body>
-</html>
