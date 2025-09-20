@@ -10,6 +10,12 @@ $query = "
 ";
 $result = $conn->query($query);
 
+if (!$result) {
+    error_log($conn->error);
+    echo json_encode(['error' => 'DB error', 'details' => $conn->error]);
+    exit;
+}
+
 $userList = [];
 while ($row = $result->fetch_assoc()) {
     $userList[] = $row['character_name'];
