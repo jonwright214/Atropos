@@ -59,18 +59,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <title>Main Page</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        .chatbox-wrapper {
-            position: fixed;
-            left: 50%;
-            bottom: 0;
-            transform: translateX(-50%);
-            width: 600px;
-            background: #fff;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            border-top: 1px solid #ccc;
-            padding: 15px;
-            z-index: 9999;
-            display: flex;
+			.chatbox-wrapper {
+			position: fixed;
+			left: 50%;
+			bottom: 0;
+			transform: translateX(-50%);
+			width: 1200px;
+			background: #fff;
+			box-shadow: 0 0 10px rgba(0,0,0,0.1);
+			border-top: 1px solid #ccc;
+			padding: 15px;
+			z-index: 9999;
+			display: flex;
         }
         #userList {
             width: 150px;
@@ -234,25 +234,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                : "#private-" + tabType.split('-')[1] + "Tab";
                     $(tabId).empty();
                     messages.forEach(function(message) {
-                        $(tabId).append('<span><strong>' + message.user + ':</strong> ' + message.messages_main + '</span>');
-                    });
+						$(tabId).append('<span><strong>' + message.user + ':</strong> ' + message.messages_main + '</span><br>');
+					});
                 }
             });
         }
 
         function fetchUserList() {
-            $.ajax({
-                url: 'fetch_users.php',
-                method: 'GET',
-                dataType: 'json',
-                success: function(users) {
-                    $('#userList').empty();
-                    users.forEach(function(u) {
-                        $('#userList').append('<div>' + u + '</div>');
-                    });
-                }
-            });
-        }
+			$.ajax({
+				url: 'fetch_users.php',
+				method: 'GET',
+				dataType: 'json',
+				success: function(users) {
+					$('#userList').empty();
+					users.forEach(function(u) {
+						$('#userList').append('<div>' + u + '</div>');
+					});
+				}
+			});
+		}
 
         function openPrivateTab(targetUser) {
             if (!privateTabs[targetUser]) {
